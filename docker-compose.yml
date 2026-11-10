@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  coffee-app:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - coffee-data:/app/data
+    environment:
+      - DATABASE_URL=/app/data/coffee.db
+      - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY in .env}
+      - INITIAL_ADMIN_USERS=${INITIAL_ADMIN_USERS:-admin}
+      - INITIAL_ADMIN_PASSWORD=${INITIAL_ADMIN_PASSWORD:?Set INITIAL_ADMIN_PASSWORD in .env}
+    restart: unless-stopped
+
+volumes:
+  coffee-data:

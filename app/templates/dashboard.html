@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PayPerCup</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 text-gray-800 p-4 md:p-8">
+    <div class="max-w-4xl mx-auto space-y-6">
+
+        {% if login_mode %}
+        <div class="max-w-md mx-auto bg-white p-6 rounded-2xl shadow-md border border-amber-100">
+            <h2 class="text-2xl font-bold mb-4 text-amber-900">☕ PayPerCup</h2>
+            {% if error %}<p class="text-red-500 text-sm mb-4">{{ error }}</p>{% endif %}
+            <form action="/login" method="POST" class="space-y-4">
+                <input type="text" name="username" placeholder="Username" required class="w-full border border-gray-300 p-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500">
+                <input type="password" name="password" placeholder="Password" required class="w-full border border-gray-300 p-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500">
+                <button type="submit" class="w-full bg-amber-700 hover:bg-amber-800 text-white py-2.5 rounded-xl font-semibold shadow-sm transition active:scale-[.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2">☕ Sign in</button>
+            </form>
+        </div>
+        {% else %}
+
+        <!-- Header -->
+        <div class="flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-amber-100">
+            <div>
+                <h1 class="text-2xl font-bold text-amber-900">☕ PayPerCup</h1>
+                <p class="text-sm text-gray-500">Logged in as <b>{{ current_user.username }}</b> ({{ current_user.role }})</p>
+            </div>
+            <a href="/logout" class="text-sm font-medium text-amber-800 bg-amber-50 hover:bg-amber-100 rounded-full px-4 py-2 transition">Log out</a>
+        </div>
+
+        <!-- Main User Counter Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {% for u in users %}
+            <div id="user-{{ u.id }}" class="bg-white p-5 rounded-2xl shadow-sm border border-transparent hover:border-amber-200 hover:shadow-md transition flex flex-col justify-between space-y-4">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="font-bold text-lg flex items-center gap-2">
+                            {{ u.username }}
+                            {% if u.role == 'admin' %}<span class="text-xs bg-amber-100 text-amber-800 px-2.5 py-1 rounded-full">Admin</span>{% endif %}
+                        </h3>
+                        <p class="text-sm text-gray-500">Total Drank: <span class="font-semibold text-gray-700">{{ u.cups }} cups</span></p>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-xs text-gray-400 uppercase font-semibold">Balance</span>
+                        <p class="text-lg font-bold {{ 'text-green-600' if u.balance_raw >= 0 else 'text-red-600' }}">
+                            €{{ u.balance_euros }}
+                        </p>
+                    </div>
+                </div>
+
+                <details class="pt-2 border-t">
+                    <summary class="cursor-pointer text-sm font-semibold text-amber-800 hover:text-amber-950">☕ Coffee history ({{ u.history_total }})</summary>
+                    {% if u.history %}
+                    <ul class="mt-2 space-y-1 text-sm text-gray-600">
+                        {% for item in u.history %}
+                        <li>
+                            <span class="font-medium">
+                                {% if item.kind == 'drank' %}Drank a coffee
+                                {% elif item.kind == 'received' %}Coffee offered by {{ item.other_username }}
+                                {% else %}Offered a coffee to {{ item.other_username }}{% endif %}
+                            </span>
+                            <time class="local-time text-xs text-gray-400" datetime="{{ item.created_at|replace(' ', 'T') }}Z">{{ item.created_at }} UTC</time>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    <p class="mt-2 text-xs text-gray-400">Times shown in your local time zone.</p>
+                    {% else %}
+                    <p class="mt-2 text-sm text-gray-500">No coffee history yet.</p>
+                    {% endif %}
+                    {% if u.history_pages > 1 %}
+                    <div class="mt-3 flex items-center justify-between text-sm">
+                        {% if u.history_page > 1 %}
+                        <a class="text-amber-800 hover:bg-amber-50 rounded-full px-3 py-1" href="/?history_user={{ u.id }}&amp;history_page={{ u.history_page - 1 }}#user-{{ u.id }}">← Previous</a>
+                        {% else %}<span></span>{% endif %}
+                        <span class="text-gray-500">Page {{ u.history_page }} of {{ u.history_pages }}</span>
+                        {% if u.history_page < u.history_pages %}
+                        <a class="text-amber-800 hover:bg-amber-50 rounded-full px-3 py-1" href="/?history_user={{ u.id }}&amp;history_page={{ u.history_page + 1 }}#user-{{ u.id }}">Next →</a>
+                        {% else %}<span></span>{% endif %}
+                    </div>
+                    {% endif %}
+                </details>
+
+                <!-- Action Bar -->
+                <div class="flex items-center gap-2 pt-2 border-t">
+                    <!-- Quick Increment/Decrement -->
+                    <form action="/coffee/add" method="POST" class="flex-1 flex gap-2">
+                        <input type="hidden" name="user_id" value="{{ u.id }}">
+                        <button type="submit" class="flex-1 bg-amber-700 hover:bg-amber-800 text-white font-bold py-2.5 rounded-xl shadow-sm transition active:scale-[.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2">
+                            ☕ +1 cup
+                        </button>
+                    </form>
+
+                    {% if current_user.role == 'admin' %}
+                    <form action="/coffee/remove" method="POST">
+                        <input type="hidden" name="user_id" value="{{ u.id }}">
+                        <button type="submit" title="Revert 1 cup" class="bg-gray-100 hover:bg-red-50 text-gray-600 hover:text-red-700 font-bold px-3 py-2.5 rounded-xl transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2">
+                            −1
+                        </button>
+                    </form>
+
+                    <!-- Offer Coffee Button -->
+                    <form action="/coffee/add" method="POST">
+                        <input type="hidden" name="user_id" value="{{ u.id }}">
+                        <input type="hidden" name="is_offered" value="true">
+                        <button type="submit" title="Offer coffee (Admin pays 25¢)" class="bg-violet-50 hover:bg-violet-100 text-violet-800 text-sm font-semibold px-3 py-2.5 rounded-xl transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2">
+                            🎁 Gift
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+
+            </div>
+            {% endfor %}
+        </div>
+
+        {% if current_user.role == 'user' %}
+        <section class="bg-white p-6 rounded-2xl shadow-sm border border-amber-100 space-y-3">
+            <h2 class="text-lg font-bold">Record a Payment to an Admin</h2>
+            <p class="text-sm text-gray-600">Use this after paying an admin outside the app. Your balance will increase by the payment amount, and the receiving admin’s balance will decrease by the same amount.</p>
+            {% if admins %}
+            <form action="/user/payment/add" method="POST" class="flex flex-col sm:flex-row gap-3">
+                <select name="recipient_id" required class="border border-gray-300 bg-white p-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+                    {% for admin in admins %}<option value="{{ admin.id }}">{{ admin.username }}</option>{% endfor %}
+                </select>
+                <input type="number" name="amount" min="0.01" step="0.01" placeholder="Amount (€)" required class="border border-gray-300 p-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+                <button type="submit" class="bg-emerald-700 hover:bg-emerald-800 text-white font-semibold rounded-xl px-4 py-2.5 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2">Record payment</button>
+            </form>
+            {% else %}
+            <p class="text-sm text-gray-500">There are no admins available to receive payments.</p>
+            {% endif %}
+        </section>
+        {% endif %}
+
+        <section id="payment-history" class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 space-y-4">
+            <h2 class="text-lg font-bold">User Payment History</h2>
+            {% if payment_history %}
+            <ul class="space-y-2">
+                {% for payment in payment_history %}
+                <li class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 border-b last:border-0 pb-2 text-sm">
+                    <span><b>{{ payment.payer }}</b> paid <b>{{ payment.recipient }}</b> <b>€{{ '%.2f'|format(payment.amount_cents / 100) }}</b></span>
+                    <time class="local-time text-xs text-gray-400" datetime="{{ payment.created_at|replace(' ', 'T') }}Z">{{ payment.created_at }} UTC</time>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="text-sm text-gray-500">No user payments recorded.</p>
+            {% endif %}
+            <p class="text-xs text-gray-400">Times shown in your local time zone.</p>
+        </section>
+
+        <section id="expense-history" class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 space-y-4">
+            <h2 class="text-lg font-bold">Expense History</h2>
+            {% if expense_history %}
+            <div class="space-y-3">
+                {% for expense in expense_history %}
+                <article class="border border-gray-200 rounded-xl p-4 flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                    <div class="space-y-1">
+                        <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                            <h3 class="font-semibold">{{ expense.title }}</h3>
+                            <span class="font-bold">€{{ '%.2f'|format(expense.amount_cents / 100) }}</span>
+                            <time class="local-time text-xs text-gray-400" datetime="{{ expense.created_at|replace(' ', 'T') }}Z">{{ expense.created_at }} UTC</time>
+                        </div>
+                        <p class="text-sm text-gray-600">{{ expense.description }}</p>
+                        <p class="text-sm text-gray-500">Paid by
+                            {% if expense.payers %}
+                            {% for payer in expense.payers %}{{ payer.username }} (credited €{{ '%.2f'|format(payer.share_cents / 100) }}){% if not loop.last %}, {% endif %}{% endfor %}.
+                            {% else %}no admin recorded.{% endif %}
+                        </p>
+                    </div>
+                    {% if current_user.role == 'admin' %}
+                    <form action="/expense/delete" method="POST" onsubmit="return confirm('Delete this expense and its participant shares?')">
+                        <input type="hidden" name="expense_id" value="{{ expense.id }}">
+                        <button type="submit" class="text-sm text-red-700 border border-red-200 hover:bg-red-50 rounded-full px-4 py-2 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2">Delete</button>
+                    </form>
+                    {% endif %}
+                </article>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-sm text-gray-500">No expenses recorded.</p>
+            {% endif %}
+            <p class="text-xs text-gray-400">Times shown in your local time zone.</p>
+        </section>
+
+        <!-- Admin Control Panel -->
+        {% if current_user.role == 'admin' %}
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-amber-100 space-y-4">
+            <div class="space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <h2 class="text-lg font-bold">Admin Panel</h2>
+                    <a href="/admin/export.json" class="inline-flex items-center gap-2 bg-gray-800 hover:bg-gray-900 text-white font-semibold rounded-xl px-4 py-2.5 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2">↓ Export all data (JSON)</a>
+                </div>
+                <section class="border-b pb-5">
+                    <h3 class="font-semibold mb-3">Record an Expense</h3>
+                    <form action="/expense/add" method="POST" class="space-y-3">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <input type="text" name="title" placeholder="Title" required class="border border-gray-300 p-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+                            <input type="number" name="amount" min="0.01" step="0.01" placeholder="Amount (€)" required class="border border-gray-300 p-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+                            <textarea name="description" placeholder="Description" required class="border border-gray-300 p-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 md:col-span-2"></textarea>
+                        </div>
+                        <p class="text-sm text-gray-600">The amount is credited positively and split evenly among the selected admins.</p>
+                        <fieldset>
+                            <legend class="text-sm font-medium mb-2">Admins who paid (the expense credit is split evenly)</legend>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                {% for u in admins %}
+                                <label class="flex items-center gap-2 text-sm border rounded p-2">
+                                    <input type="checkbox" name="payer_ids" value="{{ u.id }}" class="accent-amber-700 focus:ring-amber-500">
+                                    <span>{{ u.username }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </fieldset>
+                        <button type="submit" class="bg-amber-700 hover:bg-amber-800 text-white font-semibold rounded-xl px-4 py-2.5 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2">Record expense</button>
+                    </form>
+                </section>
+                <section>
+                    <h3 class="font-semibold mb-3">Create New User</h3>
+            <form action="/user/add" method="POST" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <input type="text" name="username" placeholder="Username" required class="border border-gray-300 p-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+                <input type="password" name="password" placeholder="Password" required class="border border-gray-300 p-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+                <select name="role" class="border border-gray-300 bg-white p-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+                    <option value="user">User (25¢)</option>
+                    <option value="admin">Admin (15¢)</option>
+                </select>
+                <button type="submit" class="bg-gray-800 hover:bg-gray-900 text-white font-semibold rounded-xl p-2.5 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2">Add user</button>
+            </form>
+                </section>
+            </div>
+        </div>
+        {% endif %}
+
+        {% endif %}
+    </div>
+    <script>
+        document.querySelectorAll('.local-time').forEach((element) => {
+            const timestamp = new Date(element.dateTime);
+            if (!Number.isNaN(timestamp.getTime())) {
+                element.textContent = new Intl.DateTimeFormat(undefined, {
+                    dateStyle: 'medium',
+                    timeStyle: 'short'
+                }).format(timestamp);
+            }
+        });
+    </script>
+</body>
+</html>
